@@ -1,0 +1,46 @@
+name: Build
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: make test
+
+      - name: Build
+        run: make
+
+      - name: Build image
+        run: |
+          docker pull ghcr.io/${{ github.repository }} || true
+          docker build --cache-from ghcr.io/${{ github.repository }} \
+            -t ghcr.io/${{ github.repository }} .
+
+      - uses: docker/login-action@v3
+        if: ${{ github.event_name == 'push' && !env.ACT }}
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push image
+        if: ${{ github.event_name == 'push' && !env.ACT }}
+        run: docker push ghcr.io/${{ github.repository }}
