@@ -21,7 +21,7 @@ func runCompletion(rest []string) int {
 // operator forms (= += - --). All key knowledge comes from `kv keys`;
 // file resolution is never reimplemented in shell.
 const bashScript = `# bash completion for kv — github.com/unixfile/kv
-# install: source <(kv completion bash)
+# install: . <(kv completion bash)
 
 # key candidates from the resolved file: full dotted paths, containers
 # end in a dot and stay open for descent, leaves close the word. $1

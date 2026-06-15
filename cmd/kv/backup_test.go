@@ -41,7 +41,7 @@ func TestBackupOnSave(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(b) != "a 1\n" {
+	if string(b) != kv.HashLine+"\na 1\n" {
 		t.Errorf("backup content %q, want previous file content", b)
 	}
 

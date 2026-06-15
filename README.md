@@ -25,6 +25,21 @@ go install github.com/unixfile/kv/cmd/kv@latest
 
 Or clone and run `make install`.
 
+## Completion
+
+Bash completion for verbs, flags, files and keys:
+
+```
+. <(kv completion bash)
+```
+
+Add that to `.bashrc` for every shell, or install it once:
+
+```
+kv completion bash > \
+  ${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions/kv
+```
+
 ## Usage
 
 ```
@@ -81,6 +96,9 @@ pack books
 $ kv title
 Spring cleaning
 ```
+
+`-F` identifies the terminal through `/proc`, so the session binding
+is Linux-only; elsewhere use `-f`, `KV_FILE`, or a lone `.kv` file.
 
 Mutations are atomic: write to a temp file, validate, rename. A failed
 operation leaves the file untouched. Before each overwrite the old

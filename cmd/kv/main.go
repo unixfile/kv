@@ -434,9 +434,6 @@ func runFmt(path string) int {
 		if err != nil {
 			return fail(err)
 		}
-		if f.Hash == "" {
-			f.Hash = kv.HashLine
-		}
 		return boolFail(saveFile(path, f))
 	}
 	b, err := io.ReadAll(os.Stdin)
@@ -599,15 +596,21 @@ func loadFile(path string, mayCreate bool) (*kv.File, error) {
 // saveFile writes atomically: temp file in the same directory, then
 // rename. An existing file keeps its permission bits and its old
 // content goes to the backup directory first; a failed backup warns but
-// never blocks the save. A JSON path is written as JSON.
+// never blocks the save. A JSON path is written as JSON; a .kv write
+// missing its idline gets the canonical hash line, existing ones kept.
 func saveFile(path string, f *kv.File) error {
-	out := []byte(f.String())
+	var out []byte
 	if jsonPath(path) {
 		b, err := kv.ToJSON(f)
 		if err != nil {
 			return err
 		}
 		out = b
+	} else {
+		if f.Hash == "" {
+			f.Hash = kv.HashLine
+		}
+		out = []byte(f.String())
 	}
 	if err := backup(path); err != nil {
 		fmt.Fprintf(os.Stderr, "kv: backup: %v\n", err)
