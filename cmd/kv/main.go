@@ -89,7 +89,7 @@ func usageText() string {
 		"  <key>                      print a value or a subtree\n" +
 		"\n" +
 		"a trailing dot on create makes an empty container\n" +
-		"a missing value is read from stdin\n" +
+		"a missing value is read from piped stdin\n" +
 		"file resolution: -f, KV_FILE, session file, a lone *.kv here\n" +
 		"without a file, fmt and the json verbs filter stdin to stdout\n" +
 		"a *.json file is edited as JSON, converted on the fly\n"
@@ -112,6 +112,18 @@ func version() string {
 func fail(err error) int {
 	fmt.Fprintf(os.Stderr, "kv: %v\n", err)
 	return 1
+}
+
+// stdinIsCharDevice reports whether stdin is a character device: an
+// interactive terminal, or a device like /dev/null. Reading a missing
+// value from a terminal blocks on a human with no prompt, which reads
+// as a hang, so the mutating verbs fail fast instead. A pipe or regular
+// file is not a char device, so `echo v | kv create k` and
+// `kv create k <file` keep working. A package var so tests drive both
+// paths.
+var stdinIsCharDevice = func() bool {
+	fi, err := os.Stdin.Stat()
+	return err == nil && fi.Mode()&os.ModeCharDevice != 0
 }
 
 // opForm rewrites operator syntax into a verb with arguments: key=value
@@ -263,6 +275,9 @@ flags:
 	value := func() (string, error) {
 		if len(rest) >= 2 {
 			return rest[1], nil
+		}
+		if stdinIsCharDevice() {
+			return "", fmt.Errorf("%s needs a value (argument or piped input)", cmd)
 		}
 		b, err := io.ReadAll(os.Stdin)
 		if err != nil {

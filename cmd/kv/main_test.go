@@ -98,6 +98,64 @@ func TestJSONFileMode(t *testing.T) {
 	}
 }
 
+// A value-less mutating verb must fail fast on an interactive terminal
+// instead of silently blocking on a stdin read.
+func TestValueLessVerbErrorsOnCharDevice(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	path := filepath.Join(t.TempDir(), "x.kv")
+	orig := stdinIsCharDevice
+	stdinIsCharDevice = func() bool { return true }
+	defer func() { stdinIsCharDevice = orig }()
+
+	for _, args := range [][]string{
+		{"-f", path, "create", "foo"},
+		{"-f", path, "update", "foo"},
+		{"-f", path, "push", "seq"},
+	} {
+		if code := run(args); code != 1 {
+			t.Errorf("run(%v): exit %d, want 1 (fast error, not a hang)", args, code)
+		}
+	}
+	// a value supplied as an argument still bypasses stdin entirely
+	if code := run([]string{"-f", path, "create", "foo", "bar"}); code != 0 {
+		t.Errorf("create with value: exit %d", code)
+	}
+}
+
+// Piped or redirected stdin is not a char device, so a missing value is
+// still read from it: the guard must not break the pipe path.
+func TestValueFromPipe(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	path := filepath.Join(t.TempDir(), "x.kv")
+	orig := stdinIsCharDevice
+	stdinIsCharDevice = func() bool { return false }
+	defer func() { stdinIsCharDevice = orig }()
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.WriteString("piped value\n"); err != nil {
+		t.Fatal(err)
+	}
+	w.Close()
+	origStdin := os.Stdin
+	os.Stdin = r
+	defer func() { os.Stdin = origStdin }()
+
+	if code := run([]string{"-f", path, "create", "k"}); code != 0 {
+		t.Fatalf("create from pipe: exit %d", code)
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "# github.com/unixfile/keyval\nk piped value\n"
+	if string(b) != want {
+		t.Errorf("file:\n%q\nwant\n%q", b, want)
+	}
+}
+
 func TestUnknownFlagShowsUsage(t *testing.T) {
 	if code := run([]string{"-x"}); code != 2 {
 		t.Errorf("unknown flag: exit %d, want 2", code)
