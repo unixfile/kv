@@ -41,6 +41,7 @@ usage: kv [-f file] [-F file] <command> [args]
   kv                            convert JSON (stdin) to keyval
   json                          convert keyval to JSON
   completion     bash           print the bash completion script
+  magic                         print a file(1) magic block for ~/.magic
 
   <key>=<value>              create or update a leaf
   <key>+=<value>             append to a sequence
@@ -139,6 +140,32 @@ renamed. Names with dots, spaces or control characters cannot be
 represented, and neither can numeric names that do not count from
 zero. A key holding an operator character needs the verb form on the
 command line: `kv r 'a=b'`.
+
+## File type
+
+`kv magic` prints a [file(1)](https://www.darwinsys.com/file/) magic
+block that recognises keyval files by the hash line kv writes. Append it
+to your `~/.magic` to teach `file` the format:
+
+```
+$ kv magic >> ~/.magic
+$ file todo.kv
+todo.kv: keyval data, github.com/unixfile/keyval
+$ file --mime-type todo.kv
+todo.kv: text/x-keyval
+```
+
+The block is a fenced section keyed by the spec URL, so it removes
+cleanly and never collides with other rules. The uninstall command rides
+along as a comment inside it:
+
+```
+sed -i '\|^# >>> github.com/unixfile/keyval >>>$|,\|^# <<< github.com/unixfile/keyval <<<$|d' ~/.magic
+```
+
+Detection needs `file`/libmagic, present on Linux, macOS and the BSDs;
+the `!:ext` line needs file 5.23 or newer. Where `file` is absent
+nothing is lost, the format does not depend on it.
 
 ## Library
 

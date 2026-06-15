@@ -39,6 +39,7 @@ var commands = []cmdDef{
 	{"kv",         "",  0, "",              "convert JSON (stdin) to keyval"},
 	{"json",       "",  0, "",              "convert keyval to JSON"},
 	{"completion", "",  1, "bash",          "print the bash completion script"},
+	{"magic",      "",  0, "",              "print a file(1) magic block for ~/.magic"},
 }
 
 // cmdByName maps every verb name (canonical and alias) to its definition.
@@ -237,6 +238,8 @@ flags:
 		return runToJSON(path)
 	case "completion":
 		return runCompletion(rest)
+	case "magic":
+		return runMagic()
 	}
 
 	if path == "" {
