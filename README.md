@@ -37,7 +37,7 @@ usage: kv [-f file] [-F file] <command> [args]
   keys        k  [key]          list child keys, containers dotted
   edit        e                 open in $EDITOR, values aligned
   fmt         f                 sort and validate
-  tree        t                 print the tree
+  tree        t  [key]          print the tree, or a subtree under a key
   kv                            convert JSON (stdin) to keyval
   json                          convert keyval to JSON
   completion     bash           print the bash completion script

@@ -354,18 +354,32 @@ func (f *File) Keys(prefix Key) (string, error) {
 	return b.String(), nil
 }
 
-// treeString renders the file as an indented tree, two spaces per level,
-// with escaped values on the leaves.
-func (f *File) Tree() string {
+// Tree renders the file as an indented tree, two spaces per level, with
+// escaped values on the leaves. A non-empty prefix scopes the output to
+// that subtree, re-rooted so the named node sits in the first column; a
+// leaf prefix prints its single line. An unknown prefix is an error.
+func (f *File) Tree(prefix Key) (string, error) {
+	idx := subtree(f, prefix)
+	if len(prefix) > 0 && len(idx) == 0 {
+		return "", fmt.Errorf("no such key: %s", prefix)
+	}
+	start := 0
+	if len(prefix) > 0 {
+		start = len(prefix) - 1
+	}
 	var b strings.Builder
 	var prev Key
-	for _, p := range f.Pairs {
+	for _, i := range idx {
+		p := f.Pairs[i]
 		common := 0
 		for common < len(prev) && common < len(p.Key)-1 && sameNode(prev[common], p.Key[common]) {
 			common++
 		}
+		if common < start {
+			common = start
+		}
 		for d := common; d < len(p.Key); d++ {
-			b.WriteString(strings.Repeat("  ", d))
+			b.WriteString(strings.Repeat("  ", d-start))
 			b.WriteString(p.Key[d].Raw)
 			if d == len(p.Key)-1 {
 				if p.Marker {
@@ -379,5 +393,5 @@ func (f *File) Tree() string {
 		}
 		prev = p.Key
 	}
-	return b.String()
+	return b.String(), nil
 }

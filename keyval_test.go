@@ -400,8 +400,40 @@ func TestTreeString(t *testing.T) {
 		"    name\n" +
 		"      0 Charles\n" +
 		"      1 Ingvar\n"
-	if got := f.Tree(); got != want {
+	got, err := f.Tree(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
 		t.Errorf("tree:\n%q\nwant\n%q", got, want)
+	}
+}
+
+func TestTreeSubtree(t *testing.T) {
+	in := "person.0.name Anna\nperson.1.name Charles\ntitle Spring\n"
+	f, err := parseFile(in, true, Strict)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		key  string
+		want string
+	}{
+		{"person", "person\n  0\n    name Anna\n  1\n    name Charles\n"},
+		{"person.1", "1\n  name Charles\n"},
+		{"person.0.name", "name Anna\n"},
+	}
+	for _, c := range cases {
+		got, err := f.Tree(mustKey(t, c.key))
+		if err != nil {
+			t.Fatalf("Tree(%s): %v", c.key, err)
+		}
+		if got != c.want {
+			t.Errorf("Tree(%s):\n%q\nwant\n%q", c.key, got, c.want)
+		}
+	}
+	if _, err := f.Tree(mustKey(t, "nope")); err == nil {
+		t.Errorf("Tree(nope): expected no-such-key error")
 	}
 }
 
@@ -546,7 +578,10 @@ func TestMarkerTreeString(t *testing.T) {
 	if err := f.Create(mustKey(t, "star"), "sun"); err != nil {
 		t.Fatal(err)
 	}
-	got := f.Tree()
+	got, err := f.Tree(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	want := "planets.\nstar sun\n"
 	if got != want {
 		t.Errorf("treeString:\n%q\nwant\n%q", got, want)

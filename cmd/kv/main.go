@@ -35,7 +35,7 @@ var commands = []cmdDef{
 	{"keys",       "k", 1, "[key]",         "list child keys, containers dotted"},
 	{"edit",       "e", 0, "",              "open in $EDITOR, values aligned"},
 	{"fmt",        "f", 0, "",              "sort and validate"},
-	{"tree",       "t", 0, "",              "print the tree"},
+	{"tree",       "t", 1, "[key]",         "print the tree, or a subtree under a key"},
 	{"kv",         "",  0, "",              "convert JSON (stdin) to keyval"},
 	{"json",       "",  0, "",              "convert keyval to JSON"},
 	{"completion", "",  1, "bash",          "print the bash completion script"},
@@ -389,7 +389,18 @@ flags:
 		if err != nil {
 			return fail(err)
 		}
-		fmt.Print(f.Tree())
+		var prefix kv.Key
+		if len(rest) > 0 {
+			prefix, err = g.ParseKey(strings.TrimSuffix(rest[0], "."))
+			if err != nil {
+				return fail(err)
+			}
+		}
+		out, err := f.Tree(prefix)
+		if err != nil {
+			return fail(err)
+		}
+		fmt.Print(out)
 	case "keys", "k":
 		f, err := loadFile(path, false)
 		if err != nil {
