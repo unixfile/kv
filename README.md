@@ -1,7 +1,8 @@
 # kv
 
 Command-line tool and Go library for the keyval format: flat key-value
-pairs forming implicit trees via dotted paths.
+pairs whose dotted paths build an implicit tree, a nested associative
+array keyed by names or indices.
 
 ```
 build.00 ./configure --prefix=/usr
@@ -16,29 +17,6 @@ planets
 The format is specified at
 [github.com/unixfile/keyval](https://github.com/unixfile/keyval).
 This implementation is strictly downstream from the spec.
-
-## Install
-
-```
-go install github.com/unixfile/kv/cmd/kv@latest
-```
-
-Or clone and run `make install`.
-
-## Completion
-
-Bash completion for verbs, flags, files and keys:
-
-```
-. <(kv completion bash)
-```
-
-Add that to `.bashrc` for every shell, or install it once:
-
-```
-kv completion bash > \
-  ${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions/kv
-```
 
 ## Usage
 
@@ -104,6 +82,14 @@ Mutations are atomic: write to a temp file, validate, rename. A failed
 operation leaves the file untouched. Before each overwrite the old
 content is copied to `${XDG_STATE_HOME:-$HOME/.local/state}/kv`, ten
 copies deep per file.
+
+## Install
+
+```
+go install github.com/unixfile/kv/cmd/kv@latest
+```
+
+Or clone and run `make install`.
 
 ## Edit
 
@@ -184,6 +170,21 @@ err = kv.Unmarshal(f, &c)
 package-level functions use the strict key grammar; the JSON-keys
 dialect is explicit, as in `kv.JSONKeys.FromJSON`, `kv.JSONKeys.Parse`
 and `kv.JSONKeys.ParseKey`. The library never touches the filesystem.
+
+## Completion
+
+Bash completion for verbs, flags, files and keys:
+
+```
+. <(kv completion bash)
+```
+
+Add that to `.bashrc` for every shell, or install it once:
+
+```
+kv completion bash > \
+  ${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions/kv
+```
 
 ## License
 
