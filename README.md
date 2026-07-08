@@ -34,6 +34,7 @@ usage: kv [-f file] [-F file] <command> [args]
   rmtree      D  <key>          delete a subtree
   push        p  <key> [value]  append to a sequence
   pop         P  <key>          remove and print the last item
+  insert      i  <key> [value]  insert at an index, siblings shift up
   keys        k  [key]          list child keys, containers dotted
   edit        e                 open in $EDITOR, values aligned
   fmt         f                 sort and validate
@@ -52,7 +53,9 @@ usage: kv [-f file] [-F file] <command> [args]
 
 Operators are the short form for daily use. The commands name the same
 operations and add strictness: create fails on an existing key, update
-on a missing one. A command name wins over a key spelled the same, so a
+on a missing one. insert takes an index from 0 to the sequence length;
+the named sibling and everything above it shift up, the mirror of the
+shift down on delete. A command name wins over a key spelled the same, so a
 key literally named `tree` needs `kv r tree`.
 
 The file is resolved in order: `-f`, the `KV_FILE` environment

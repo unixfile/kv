@@ -322,6 +322,125 @@ func TestPushAdoptsRaw(t *testing.T) {
 	}
 }
 
+func TestInsertRenumbers(t *testing.T) {
+	f, err := parseFile("n.0 a\nn.1 b\nn.2 c\n", true, Strict)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Insert(mustKey(t, "n.1"), "x"); err != nil {
+		t.Fatal(err)
+	}
+	want := "n.0 a\nn.1 x\nn.2 b\nn.3 c\n"
+	if f.String() != want {
+		t.Errorf("after insert:\n%q\nwant\n%q", f.String(), want)
+	}
+}
+
+func TestInsertHeadAndAppend(t *testing.T) {
+	f, err := parseFile("n.0 b\n", true, Strict)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Insert(mustKey(t, "n.0"), "a"); err != nil {
+		t.Fatal(err)
+	}
+	// an index equal to the count appends, exactly like push
+	if err := f.Insert(mustKey(t, "n.2"), "c"); err != nil {
+		t.Fatal(err)
+	}
+	want := "n.0 a\nn.1 b\nn.2 c\n"
+	if f.String() != want {
+		t.Errorf("after inserts:\n%q\nwant\n%q", f.String(), want)
+	}
+}
+
+func TestInsertErrors(t *testing.T) {
+	f, err := parseFile("n.0 a\ntitle x\n", true, Strict)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Insert(mustKey(t, "n.2"), "x"); err == nil {
+		t.Error("insert with index gap: expected error")
+	}
+	if err := f.Insert(mustKey(t, "n.name"), "x"); err == nil {
+		t.Error("insert at a name: expected error")
+	}
+	if err := f.Insert(mustKey(t, "title.0"), "x"); err == nil {
+		t.Error("insert under a leaf: expected error")
+	}
+	if f.String() != "n.0 a\ntitle x\n" {
+		t.Errorf("failed inserts changed the file:\n%q", f.String())
+	}
+}
+
+func TestInsertShiftsBranches(t *testing.T) {
+	in := "person.0.name Anna\nperson.1.name Cilla\n"
+	f, err := parseFile(in, true, Strict)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Insert(mustKey(t, "person.1"), "Bo"); err != nil {
+		t.Fatal(err)
+	}
+	want := "person.0.name Anna\nperson.1 Bo\nperson.2.name Cilla\n"
+	if f.String() != want {
+		t.Errorf("after insert:\n%q\nwant\n%q", f.String(), want)
+	}
+}
+
+func TestInsertRepads(t *testing.T) {
+	f := &File{}
+	for range 10 {
+		if err := f.Push(mustKey(t, "n"), "x"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// the 11th member pushes the column from one digit to two
+	if err := f.Insert(mustKey(t, "n.5"), "y"); err != nil {
+		t.Fatal(err)
+	}
+	keys := make([]string, len(f.Pairs))
+	for i, p := range f.Pairs {
+		keys[i] = p.Key.String()
+	}
+	got := strings.Join(keys, ",")
+	want := "n.00,n.01,n.02,n.03,n.04,n.05,n.06,n.07,n.08,n.09,n.10"
+	if got != want {
+		t.Errorf("after insert: %s, want %s", got, want)
+	}
+	if out, err := f.Read(mustKey(t, "n.5")); err != nil || out != "y\n" {
+		t.Errorf("read inserted = %q, %v", out, err)
+	}
+}
+
+func TestInsertAdoptsRaw(t *testing.T) {
+	// file spells the column two digits wide; the new member follows
+	f, err := parseFile("x.00.a 1\nx.01.a 2\n", true, Strict)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Insert(mustKey(t, "x.1"), "v"); err != nil {
+		t.Fatal(err)
+	}
+	want := "x.00.a 1\nx.01 v\nx.02.a 2\n"
+	if f.String() != want {
+		t.Errorf("after insert:\n%q\nwant\n%q", f.String(), want)
+	}
+}
+
+func TestInsertRemovesMarker(t *testing.T) {
+	f, err := parseFile("planets\n", true, Strict)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Insert(mustKey(t, "planets.0"), "mercury"); err != nil {
+		t.Fatal(err)
+	}
+	if f.String() != "planets.0 mercury\n" {
+		t.Errorf("after insert:\n%q", f.String())
+	}
+}
+
 func TestCreateAdoptsRaw(t *testing.T) {
 	f, err := parseFile("x.00.a 1\n", true, Strict)
 	if err != nil {

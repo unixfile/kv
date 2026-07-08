@@ -1,4 +1,4 @@
-// The crudpP operations, plus tree rendering. All mutations end in
+// The crudpPi operations, plus tree rendering. All mutations end in
 // finish, which restores the sort invariant and revalidates; a failed
 // validation rolls back and nothing is written to disk.
 
@@ -119,9 +119,30 @@ func shiftDown(f *File, key Key) {
 	}
 }
 
+// shiftUp renumbers the node at key and its higher-indexed siblings up
+// by one, rewriting that segment in every pair under each. Each segment
+// keeps its digit width; widenSeq repairs the column afterwards.
+func shiftUp(f *File, key Key) {
+	d := len(key) - 1
+	at := key[d]
+	for i := range f.Pairs {
+		k := f.Pairs[i].Key
+		if len(k) <= d || !hasNodePrefix(k[:d], key[:d]) {
+			continue
+		}
+		s := &k[d]
+		if !s.IsIndex || s.Index < at.Index {
+			continue
+		}
+		w := s.width()
+		s.Index++
+		s.Raw = pad(s.Index, w)
+	}
+}
+
 func (f *File) Create(key Key, val string) error {
 	if key[len(key)-1].IsIndex {
-		return fmt.Errorf("cannot create an index directly, use push: %s", key)
+		return fmt.Errorf("cannot create an index directly, use push or insert: %s", key)
 	}
 	if err := checkValue(val); err != nil {
 		return fmt.Errorf("key %s: %v", key, err)
@@ -279,23 +300,64 @@ func (f *File) Push(key Key, val string) error {
 	}
 	saved := snapshot(f)
 	newIdx := count
-	if len(fmt.Sprint(newIdx)) > width {
-		width = len(fmt.Sprint(newIdx))
-		d := len(key)
-		for i := range f.Pairs {
-			k := f.Pairs[i].Key
-			if len(k) <= d || !hasNodePrefix(k[:d], key) {
-				continue
-			}
-			s := &k[d]
-			if !s.IsIndex {
-				continue
-			}
-			s.Raw = pad(s.Index, width)
-		}
-	}
+	width = widenSeq(f, key, newIdx, width)
 	seg := Segment{Raw: pad(newIdx, width), Index: newIdx, IsIndex: true}
 	nk := append(adoptRaw(f, key), seg)
+	f.Pairs = append(f.Pairs, Pair{Key: nk, Value: val})
+	return finish(f, saved)
+}
+
+// widenSeq grows the digit width of the indexed children of the
+// container at key when index idx needs more digits, rewriting the whole
+// column so lexicographic order survives. It returns the width in force.
+func widenSeq(f *File, key Key, idx, width int) int {
+	if len(fmt.Sprint(idx)) <= width {
+		return width
+	}
+	width = len(fmt.Sprint(idx))
+	d := len(key)
+	for i := range f.Pairs {
+		k := f.Pairs[i].Key
+		if len(k) <= d || !hasNodePrefix(k[:d], key) {
+			continue
+		}
+		s := &k[d]
+		if !s.IsIndex {
+			continue
+		}
+		s.Raw = pad(s.Index, width)
+	}
+	return width
+}
+
+// opInsert writes a new leaf at the index naming the last segment of
+// key, first shifting that sibling and every higher one up by one. An
+// index equal to the member count appends, exactly like push; a higher
+// one would leave a gap and fails.
+func (f *File) Insert(key Key, val string) error {
+	last := key[len(key)-1]
+	if !last.IsIndex {
+		return fmt.Errorf("insert needs an index: %s", key)
+	}
+	if err := checkValue(val); err != nil {
+		return fmt.Errorf("key %s: %v", key, err)
+	}
+	parent := key[:len(key)-1]
+	if len(parent) > 0 && findLeaf(f, parent) >= 0 {
+		return fmt.Errorf("key is a leaf: %s", parent)
+	}
+	count, width := seqMembers(f, parent)
+	if last.Index > count {
+		return fmt.Errorf("index %d out of sequence, expected at most %d: %s", last.Index, count, key)
+	}
+	if width == 0 {
+		width = 1
+	}
+	saved := snapshot(f)
+	shiftUp(f, key)
+	width = widenSeq(f, parent, count, width)
+	seg := Segment{Raw: pad(last.Index, width), Index: last.Index, IsIndex: true}
+	nk := append(adoptRaw(f, parent), seg)
 	f.Pairs = append(f.Pairs, Pair{Key: nk, Value: val})
 	return finish(f, saved)
 }

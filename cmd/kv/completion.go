@@ -139,7 +139,7 @@ _kv() {
     case $verb in
         create | c | push | p | pop | P) _kv_keys markers '' ;;
         update | u | delete | d) _kv_keys leaves '' ;;
-        read | r | rmtree | D | keys | k | tree | t) _kv_keys all '' ;;
+        read | r | rmtree | D | keys | k | tree | t | insert | i) _kv_keys all '' ;;
         completion) [[ bash == "$cur"* ]] && COMPREPLY=('bash ') ;;
     esac
     return 0

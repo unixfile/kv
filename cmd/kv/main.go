@@ -32,6 +32,7 @@ var commands = []cmdDef{
 	{"rmtree",     "D", 1, "<key>",         "delete a subtree"},
 	{"push",       "p", 2, "<key> [value]", "append to a sequence"},
 	{"pop",        "P", 1, "<key>",         "remove and print the last item"},
+	{"insert",     "i", 2, "<key> [value]", "insert at an index, siblings shift up"},
 	{"keys",       "k", 1, "[key]",         "list child keys, containers dotted"},
 	{"edit",       "e", 0, "",              "open in $EDITOR, values aligned"},
 	{"fmt",        "f", 0, "",              "sort and validate"},
@@ -320,7 +321,7 @@ flags:
 		if err := saveFile(path, f); err != nil {
 			return fail(err)
 		}
-	case "update", "u", "push", "p", "set":
+	case "update", "u", "push", "p", "insert", "i", "set":
 		k, err := key()
 		if err != nil {
 			return fail(err)
@@ -338,6 +339,8 @@ flags:
 			err = f.Update(k, v)
 		case 'p':
 			err = f.Push(k, v)
+		case 'i':
+			err = f.Insert(k, v)
 		case 's': // upsert via the = operator
 			err = f.Set(k, v)
 		}
