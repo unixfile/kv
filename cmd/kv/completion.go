@@ -18,7 +18,7 @@ func runCompletion(rest []string) int {
 // bashScript completes verbs, flags, files and keys. Keys complete
 // level by level like directories: containers end in a dot and the
 // word stays open. A word that exactly names a node also offers the
-// operator forms (= += - --). All key knowledge comes from `kv keys`;
+// operator forms (= += $ !). All key knowledge comes from `kv keys`;
 // file resolution is never reimplemented in shell.
 const bashScript = `# bash completion for kv — github.com/unixfile/kv
 # install: . <(kv completion bash)
@@ -27,7 +27,7 @@ const bashScript = `# bash completion for kv — github.com/unixfile/kv
 # end in a dot and stay open for descent, leaves close the word. $1
 # filters the node type (all|leaves|markers); $2=ops adds the operator
 # forms when the typed word reaches a node exactly. = and += stay open
-# for the value; - and -- close the command.
+# for the value; $ and ! close the command.
 _kv_keys() {
     local filter=$1 ops=$2 line out k v prefix=''
     [[ $cur == *.* ]] && prefix=${cur%.*}
@@ -50,13 +50,13 @@ _kv_keys() {
     local cands
     for line in $out; do
         # a key holding operator characters only works in verb form
-        case $line in *[=+-]*) continue ;; esac
+        case $line in *[=+!$]*) continue ;; esac
         k=${line%.}
         [[ $cur == "$k"* ]] || continue
         if [[ $line == *. ]]; then
-            cands=("$k " "$k+=" "$k-- ")
+            cands=("$k " "$k+=" "$k\$ ")
         else
-            cands=("$k=" "$k- ")
+            cands=("$k=" "$k! ")
         fi
         for v in "${cands[@]}"; do
             [[ $v == "$cur"* ]] && COMPREPLY+=("$v")

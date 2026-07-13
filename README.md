@@ -46,8 +46,8 @@ usage: kv [-f file] [-F file] <command> [args]
 
   <key>=<value>              create or update a leaf
   <key>+=<value>             append to a sequence
-  <key>--                    remove and print the last item
-  <key>-                     delete a leaf
+  <key>$                     remove and print the last item
+  <key>!                     delete a leaf
   <key>                      print a value or a subtree
 ```
 
@@ -73,7 +73,7 @@ steps
   0 buy boxes
   1 pack books
 title Spring cleaning
-$ kv steps--
+$ kv steps$
 pack books
 $ kv title
 Spring cleaning

@@ -85,8 +85,8 @@ func usageText() string {
 		"\n" +
 		"  <key>=<value>              create or update a leaf\n" +
 		"  <key>+=<value>             append to a sequence\n" +
-		"  <key>--                    remove and print the last item\n" +
-		"  <key>-                     delete a leaf\n" +
+		"  <key>$                     remove and print the last item\n" +
+		"  <key>!                     delete a leaf\n" +
 		"  <key>                      print a value or a subtree\n" +
 		"\n" +
 		"a trailing dot on create makes an empty container\n" +
@@ -128,8 +128,8 @@ var stdinIsCharDevice = func() bool {
 }
 
 // opForm rewrites operator syntax into a verb with arguments: key=value
-// upserts, key+=value pushes, key-- pops, key- deletes and a bare key
-// reads. Order matters: += before =, -- before -.
+// upserts, key+=value pushes, key$ pops, key! deletes and a bare key
+// reads. Order matters: += before =.
 func opForm(arg string, rest []string) (string, []string) {
 	if i := strings.Index(arg, "+="); i >= 0 {
 		return "push", append([]string{arg[:i], arg[i+2:]}, rest...)
@@ -137,10 +137,10 @@ func opForm(arg string, rest []string) (string, []string) {
 	if i := strings.IndexByte(arg, '='); i >= 0 {
 		return "set", append([]string{arg[:i], arg[i+1:]}, rest...)
 	}
-	if k, ok := strings.CutSuffix(arg, "--"); ok {
+	if k, ok := strings.CutSuffix(arg, "$"); ok {
 		return "pop", append([]string{k}, rest...)
 	}
-	if k, ok := strings.CutSuffix(arg, "-"); ok {
+	if k, ok := strings.CutSuffix(arg, "!"); ok {
 		return "delete", append([]string{k}, rest...)
 	}
 	return "read", append([]string{arg}, rest...)

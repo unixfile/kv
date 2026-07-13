@@ -49,9 +49,9 @@ func TestOperators(t *testing.T) {
 	ok("title=Autumn") // = updates
 	ok("steps+=one")   // += pushes
 	ok("steps+=two")
-	ok("steps--")             // -- pops
+	ok("steps$")              // $ pops
 	ok("steps.0")             // bare key reads
-	ok("steps.0-")            // - deletes
+	ok("steps.0!")            // ! deletes
 	bad("steps.0")            // gone
 	ok("note=")               // empty value, no stdin
 	bad("title=two", "words") // unquoted value screams
