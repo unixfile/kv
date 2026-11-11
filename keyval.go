@@ -1,5 +1,5 @@
 // Package kv models, parses and serializes the keyval (.kv) format,
-// spec v1.0. The library never touches the filesystem; callers own all
+// spec v1.1. The library never touches the filesystem; callers own all
 // file I/O.
 package kv
 
@@ -64,16 +64,22 @@ func parseSegment(s string, d Dialect) (Segment, error) {
 	switch c := s[0]; {
 	case c >= '0' && c <= '9':
 		return Segment{}, fmt.Errorf("segment %q: bad index: not all digits", s)
-	case c >= 'a' && c <= 'z':
+	case isLetter(c):
 		for i := 1; i < len(s); i++ {
 			c := s[i]
-			if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '_' {
+			if !isLetter(c) && (c < '0' || c > '9') && c != '_' {
 				return Segment{}, fmt.Errorf("segment %q: invalid character %q", s, string(c))
 			}
 		}
 		return Segment{Raw: s, Name: s}, nil
 	}
-	return Segment{}, fmt.Errorf("segment %q: must start with a-z or 0-9", s)
+	return Segment{}, fmt.Errorf("segment %q: must start with a letter or 0-9", s)
+}
+
+// isLetter reports an ASCII letter. Uppercase is part of a name from
+// spec version 1.1.
+func isLetter(c byte) bool {
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
 }
 
 func allDigits(s string) bool {

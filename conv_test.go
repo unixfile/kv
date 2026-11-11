@@ -73,7 +73,6 @@ func TestFromJSONErrors(t *testing.T) {
 	cases := map[string]string{
 		"top-level scalar": `5`,
 		"top-level null":   `null`,
-		"uppercase key":    `{"Name": "x"}`,
 		"dashed key":       `{"a-b": "x"}`,
 		"control char":     `{"a": "xy"}`,
 		"empty key":        `{"": "x"}`,

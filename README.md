@@ -136,7 +136,7 @@ null. Markers become `{}`, so an empty JSON array returns as an empty
 object.
 
 Keys follow the document. A `.kv` file allows only the strict grammar:
-lowercase names and indices. When the document is JSON, a `.json` file
+names of letters, digits and underscores, and indices. When the document is JSON, a `.json` file
 or the json verbs, keys are taken verbatim, so `maxRetries`,
 `Content-Type` and `$schema` all work. Keys are never folded or
 renamed. Names with dots, spaces or control characters cannot be

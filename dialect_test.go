@@ -25,8 +25,16 @@ func TestParseSegmentJSONKeys(t *testing.T) {
 			t.Errorf("parseSegment(%q, JSONKeys): expected error", in)
 		}
 	}
-	if _, err := parseSegment("maxRetries", Strict); err == nil {
-		t.Error("parseSegment(maxRetries, Strict): expected error")
+	for _, in := range []string{"maxRetries", "UPPER", "apiVersion", "A_1"} {
+		seg, err := parseSegment(in, Strict)
+		if err != nil || seg.IsIndex || seg.Name != in {
+			t.Errorf("parseSegment(%q, Strict) = %+v, %v, want name", in, seg, err)
+		}
+	}
+	for _, in := range []string{"Content-Type", "$schema", "_id", "2x", "färg"} {
+		if _, err := parseSegment(in, Strict); err == nil {
+			t.Errorf("parseSegment(%q, Strict): expected error", in)
+		}
 	}
 }
 

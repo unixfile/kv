@@ -93,7 +93,7 @@ func TestJSONFileMode(t *testing.T) {
 	}
 	// the same key must stay foreign to a .kv file
 	kvPath := filepath.Join(t.TempDir(), "y.kv")
-	if code := run([]string{"-f", kvPath, "maxRetries=1"}); code == 0 {
+	if code := run([]string{"-f", kvPath, "Content-Type=1"}); code == 0 {
 		t.Error("strict file accepted a foreign key")
 	}
 }

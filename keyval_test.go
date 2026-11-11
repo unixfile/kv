@@ -18,6 +18,8 @@ func TestParseSegment(t *testing.T) {
 		{"sha256", "sha256", 0, false},
 		{"first_name", "first_name", 0, false},
 		{"x9", "x9", 0, false},
+		{"Name", "Name", 0, false},
+		{"apiVersion", "apiVersion", 0, false},
 		{"0", "", 0, true},
 		{"7", "", 7, true},
 		{"31", "", 31, true},
@@ -34,7 +36,7 @@ func TestParseSegment(t *testing.T) {
 				c.in, seg, c.name, c.index, c.isIndex)
 		}
 	}
-	for _, in := range []string{"", "Name", "9a", "a-b", "_a", "a b", "0_", "-1"} {
+	for _, in := range []string{"", "9a", "a-b", "_a", "a b", "0_", "-1"} {
 		if _, err := parseSegment(in, Strict); err == nil {
 			t.Errorf("parseSegment(%q): expected error", in)
 		}
@@ -116,17 +118,17 @@ func TestMixedChildren(t *testing.T) {
 
 func TestParseFileErrors(t *testing.T) {
 	cases := map[string]string{
-		"out of order":      "b x\na y\n",
-		"duplicate":         "a x\na y\n",
-		"leaf and branch":   "a x\na.b y\n",
-		"leaf and sequence": "name x\nname.0 y\n",
-		"index gap":         "n.0 x\nn.2 y\n",
-		"starts at 1":       "n.1 x\n",
-		"empty line":        "a x\n\nb y\n",
-		"hash mid-file":     "a x\n# foo\n",
-		"uppercase":         "Name x\n",
-		"padding mismatch":  "x.0.a 1\nx.00.b 2\n",
-		"unpadded ten":      "n.0 a\nn.1 a\nn.10 a\nn.2 a\nn.3 a\nn.4 a\nn.5 a\nn.6 a\nn.7 a\nn.8 a\nn.9 a\n",
+		"out of order":       "b x\na y\n",
+		"duplicate":          "a x\na y\n",
+		"leaf and branch":    "a x\na.b y\n",
+		"leaf and sequence":  "name x\nname.0 y\n",
+		"index gap":          "n.0 x\nn.2 y\n",
+		"starts at 1":        "n.1 x\n",
+		"empty line":         "a x\n\nb y\n",
+		"hash mid-file":      "a x\n# foo\n",
+		"uppercase unsorted": "a x\nB y\n",
+		"padding mismatch":   "x.0.a 1\nx.00.b 2\n",
+		"unpadded ten":       "n.0 a\nn.1 a\nn.10 a\nn.2 a\nn.3 a\nn.4 a\nn.5 a\nn.6 a\nn.7 a\nn.8 a\nn.9 a\n",
 	}
 	for name, in := range cases {
 		if _, err := parseFile(in, true, Strict); err == nil {
