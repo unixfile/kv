@@ -131,8 +131,9 @@ $ kv -f config.json update db.port 9090
 $ kv -f deploy.yaml spec.replicas=5
 ```
 
-Conversion is lossy at the edges: YAML comments are dropped, and a
-quoted `"8080"` returns as a number.
+Conversion is lossy at the edges: YAML comments are dropped and keys
+come back sorted. A name holding a dot is typed with a backslash, eg
+`'metadata.labels.app\.kubernetes\.io/name'`.
 [doc/conversion.md](doc/conversion.md) has the rules.
 
 ## File type

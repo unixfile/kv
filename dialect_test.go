@@ -5,7 +5,7 @@ import "testing"
 func TestParseSegmentJSONKeys(t *testing.T) {
 	verbatim := []string{
 		"maxRetries", "Content-Type", "$schema", "_id", "@type",
-		"2x", "färg", "UPPER", `a\b`, "a=b",
+		"2x", "färg", "UPPER", "a=b",
 	}
 	for _, in := range verbatim {
 		seg, err := parseSegment(in, JSONKeys)
@@ -73,15 +73,110 @@ func TestFromJSONForeignKeys(t *testing.T) {
 	}
 }
 
-// a dotted object name would silently split into path structure, so it
-// is an error in every dialect, and for marshalled map keys too
+// a dotted object name would silently split into path structure, so
+// the strict grammar rejects it, for marshalled map keys too
 func TestDottedNamesRejected(t *testing.T) {
-	for _, d := range []Dialect{Strict, JSONKeys} {
-		if _, err := d.FromJSON([]byte(`{"a.b": 1}`)); err == nil {
-			t.Errorf("dialect %d: dotted object name accepted", d)
-		}
+	if _, err := FromJSON([]byte(`{"a.b": 1}`)); err == nil {
+		t.Error("strict FromJSON: dotted object name accepted")
 	}
 	if _, err := Marshal(map[string]string{"a.b": "x"}); err == nil {
 		t.Error("Marshal: dotted map key accepted")
+	}
+}
+
+// JSONKeys writes a dot inside a name as \. and a backslash as \\
+func TestEscapedNames(t *testing.T) {
+	k, err := JSONKeys.ParseKey(`labels.app\.kubernetes\.io/name.a\\.0`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(k) != 4 || k[1].Name != "app.kubernetes.io/name" || k[2].Name != `a\` || !k[3].IsIndex {
+		t.Errorf("ParseKey = %+v", k)
+	}
+	if got := k.String(); got != `labels.app\.kubernetes\.io/name.a\\.0` {
+		t.Errorf("String = %q", got)
+	}
+	for _, in := range []string{`a\b`, `a\`, `\`} {
+		if _, err := JSONKeys.ParseKey(in); err == nil {
+			t.Errorf("ParseKey(%q): expected error", in)
+		}
+	}
+	if _, err := ParseKey(`a\.b`); err == nil {
+		t.Error("strict ParseKey accepted an escape")
+	}
+	for in, want := range map[string]string{`a.`: `a`, `a\.`: `a\.`, `a\\.`: `a\\`, `a`: `a`} {
+		if got, _ := TrimDot(in); got != want {
+			t.Errorf("TrimDot(%q) = %q, want %q", in, got, want)
+		}
+	}
+
+	in := []byte(`{"labels": {"app.kubernetes.io/name": "web", "a\\b": 1, "app": {"x": 2}}}`)
+	f, err := JSONKeys.FromJSON(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := HashLine + "\nlabels.a\\\\b 1\nlabels.app.x 2\nlabels.app\\.kubernetes\\.io/name web\n"
+	if f.String() != want {
+		t.Errorf("kv form:\n%s\nwant\n%s", f.String(), want)
+	}
+	back, err := JSONKeys.Parse(f.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := ToJSON(back)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantJSON := "{\n  \"labels\": {\n    \"a\\\\b\": 1,\n    \"app\": {\n      \"x\": 2\n    },\n    \"app.kubernetes.io/name\": \"web\"\n  }\n}\n"
+	if string(out) != wantJSON {
+		t.Errorf("round trip:\n%s\nwant\n%s", out, wantJSON)
+	}
+}
+
+// a string that looks like another type keeps its quotes as a leaf and
+// returns as the same string
+func TestQuotedStrings(t *testing.T) {
+	in := `{"a": "8080", "b": "true", "c": "null", "d": "plain", "e": "\"q\"", "f": 8080, "g": "", "h": "08", "i": "<&>1"}`
+	f, err := FromJSON([]byte(in))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := HashLine + `
+a "8080"
+b "true"
+c "null"
+d plain
+e "\\"q\\""
+f 8080
+g \0
+h 08
+i <&>1
+`
+	if f.String() != want {
+		t.Errorf("kv form:\n%s\nwant\n%s", f.String(), want)
+	}
+	back, err := Parse(f.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := ToJSON(back)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f2, err := FromJSON(out)
+	if err != nil || f2.String() != f.String() {
+		t.Errorf("JSON round trip: %v\n%s", err, out)
+	}
+	y, err := ToYAML(back)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantYAML := "a: \"8080\"\nb: \"true\"\nc: \"null\"\nd: plain\ne: '\"q\"'\nf: 8080\ng: \"\"\nh: \"08\"\ni: <&>1\n"
+	if string(y) != wantYAML {
+		t.Errorf("yaml:\n%s\nwant\n%s", y, wantYAML)
+	}
+	f3, err := FromYAML(y)
+	if err != nil || f3.String() != f.String() {
+		t.Errorf("YAML round trip: %v\n%s", err, f3)
 	}
 }

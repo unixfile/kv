@@ -22,7 +22,8 @@ func FromYAML(data []byte) (*File, error) { return Strict.FromYAML(data) }
 // FromYAML converts a YAML stream to a keyval file, as FromJSON does
 // for JSON: mappings become named children, sequences indexed children,
 // empty containers markers. Scalars are written in their JSON spelling,
-// so 0x10 becomes 16 and True becomes true. Comments are dropped and
+// so 0x10 becomes 16 and True becomes true, and a string that looks
+// like one of them keeps quotes, as in FromJSON. Comments are dropped and
 // aliases and merge keys are expanded. A stream of two or more
 // documents becomes a top-level sequence, one index per document; empty
 // documents are skipped. A lone document must be a mapping or a
@@ -97,9 +98,12 @@ func (w *yamlWalk) walk(n *yaml.Node, path string, depth int) error {
 	n = resolveAlias(n)
 	switch n.Kind {
 	case yaml.ScalarNode:
-		v, err := yamlScalar(n)
+		v, typed, err := yamlScalar(n)
 		if err != nil {
 			return fmt.Errorf("key %q: %v", path, err)
+		}
+		if !typed {
+			v = quoteString(v)
 		}
 		return emitLeaf(w.f, path, v, w.d)
 	case yaml.SequenceNode:
@@ -122,10 +126,11 @@ func (w *yamlWalk) walk(n *yaml.Node, path string, depth int) error {
 			return emitMarker(w.f, path, w.d)
 		}
 		for i, name := range names {
-			if err := checkName(path, name); err != nil {
+			seg, err := nameSegment(path, name, w.d)
+			if err != nil {
 				return err
 			}
-			if err := w.walk(items[i], joinPath(path, name), depth+1); err != nil {
+			if err := w.walk(items[i], joinPath(path, seg), depth+1); err != nil {
 				return err
 			}
 		}
@@ -158,7 +163,7 @@ func yamlMapping(n *yaml.Node, path string, depth int) ([]string, []*yaml.Node, 
 			}
 			continue
 		}
-		name, err := yamlScalar(k)
+		name, _, err := yamlScalar(k)
 		if err != nil {
 			return nil, nil, fmt.Errorf("key %q: %v", path, err)
 		}
@@ -190,41 +195,41 @@ func yamlMapping(n *yaml.Node, path string, depth int) ([]string, []*yaml.Node, 
 }
 
 // yamlScalar spells a scalar the way FromJSON would have received it:
-// null, true, false and JSON numbers. Strings, timestamps and anything
-// else keep their text.
-func yamlScalar(n *yaml.Node) (string, error) {
+// null, true, false and JSON numbers, reported as typed. Strings,
+// timestamps and anything else keep their text and are not typed.
+func yamlScalar(n *yaml.Node) (string, bool, error) {
 	switch n.ShortTag() {
 	case "!!null":
-		return "null", nil
+		return "null", true, nil
 	case "!!bool":
 		var b bool
 		if err := n.Decode(&b); err != nil {
-			return "", err
+			return "", false, err
 		}
-		return strconv.FormatBool(b), nil
+		return strconv.FormatBool(b), true, nil
 	case "!!int":
 		if json.Valid([]byte(n.Value)) {
-			return n.Value, nil
+			return n.Value, true, nil
 		}
 		var v any
 		if err := n.Decode(&v); err != nil {
-			return "", err
+			return "", false, err
 		}
-		return fmt.Sprint(v), nil
+		return fmt.Sprint(v), true, nil
 	case "!!float":
 		if json.Valid([]byte(n.Value)) {
-			return n.Value, nil
+			return n.Value, true, nil
 		}
 		var v float64
 		if err := n.Decode(&v); err != nil {
-			return "", err
+			return "", false, err
 		}
 		if math.IsInf(v, 0) || math.IsNaN(v) {
-			return n.Value, nil
+			return n.Value, false, nil
 		}
-		return strconv.FormatFloat(v, 'g', -1, 64), nil
+		return strconv.FormatFloat(v, 'g', -1, 64), true, nil
 	}
-	return n.Value, nil
+	return n.Value, false, nil
 }
 
 // ToYAML converts a keyval file to YAML with two-space indentation.
@@ -255,9 +260,10 @@ func ToYAML(f *File) ([]byte, error) {
 // yamlGuessScalar is guessScalar for the YAML encoder. A number keeps
 // its spelling by travelling as a tagged scalar node.
 func yamlGuessScalar(v string) any {
-	raw, ok := guessScalar(v).(json.RawMessage)
+	g := guessScalar(v)
+	raw, ok := g.(json.RawMessage)
 	if !ok {
-		return v
+		return g
 	}
 	switch v {
 	case "null":

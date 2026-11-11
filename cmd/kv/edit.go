@@ -61,9 +61,20 @@ func renderTOC(f *kv.File) string {
 // provided no space comes before it; a line without one passes through
 // unchanged, so plain kv lines may be typed in the editor.
 func detoc(line string) string {
-	sp := strings.IndexByte(line, ' ')
-	dd := strings.Index(line, "..")
-	if dd < 0 || sp >= 0 && sp < dd {
+	// the leader is the first two dots in a row before any space; a
+	// dot behind a backslash is part of a name and does not count
+	dd := -1
+	for i := 0; i < len(line) && line[i] != ' '; i++ {
+		if line[i] == '\\' {
+			i++
+			continue
+		}
+		if line[i] == '.' && i+1 < len(line) && line[i+1] == '.' {
+			dd = i
+			break
+		}
+	}
+	if dd < 0 {
 		return line
 	}
 	key := line[:dd]

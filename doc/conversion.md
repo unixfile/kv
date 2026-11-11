@@ -20,10 +20,28 @@ a JSON number, `true`, `false` or `null` converts to that type;
 everything else stays a string. Scalars therefore round-trip, including
 null.
 
-The guess has a cost: a string that looks like another type changes
-type. JSON `"8080"` and YAML `"true"` return as the number 8080 and the
-boolean true. Kubernetes rejects a boolean where it wants a string, eg
-in an `env` value or an annotation, so check such fields after an edit.
+A string that looks like another type keeps its quotes as a leaf, so
+it returns as the same string:
+
+```
+$ printf 'port: "8080"\ndebug: "true"\nreplicas: 3\n' | kv kv
+# github.com/unixfile/keyval
+debug "true"
+port "8080"
+replicas 3
+```
+
+The same holds when setting a value. Kubernetes wants strings in `env`
+values, labels and annotations, so quote a value that looks like a
+number or a boolean:
+
+```
+$ kv -f deploy.yaml 'spec.template.spec.containers.0.env.0.value="true"'
+```
+
+Without the quotes the value is written as the boolean true. A leaf
+spelled like a JSON string literal, quotes at both ends, always converts
+to the string inside them.
 
 Markers become `{}`, so an empty array returns as an empty object.
 
@@ -36,11 +54,23 @@ verb on stdin and stdout, keys are taken verbatim, so `maxRetries`,
 `Content-Type` and `$schema` all work. Keys are never folded or
 renamed.
 
-Names with dots, spaces or control characters cannot be represented,
-and neither can numeric names that do not count from zero. A Kubernetes
-label such as `app.kubernetes.io/name` holds dots, so a manifest that
-uses one does not convert. A key holding an operator character needs
-the verb form on the command line: `kv r 'a=b'`.
+A dot inside a JSON or YAML name is written `\.`, and a backslash `\\`,
+so the dot that separates segments stays unambiguous:
+
+```
+$ kv -f deploy.yaml 'metadata.labels.app\.kubernetes\.io/name=web'
+$ kv -f deploy.yaml metadata.labels
+metadata.labels.app\.kubernetes\.io/name web
+```
+
+The escape belongs to this bridge, not to the keyval format. A `.kv`
+file cannot hold such a name, so converting that document into a `.kv`
+file fails.
+
+Names with spaces or control characters cannot be represented, and
+neither can numeric names that do not count from zero. A key holding an
+operator character needs the verb form on the command line:
+`kv r 'a=b'`.
 
 ## What YAML loses
 

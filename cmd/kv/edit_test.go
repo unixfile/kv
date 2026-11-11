@@ -194,3 +194,20 @@ func TestEditDraftKeptOnFailedSave(t *testing.T) {
 		t.Errorf("draft content: %q, %v, want the edit preserved", b, err)
 	}
 }
+
+// a name ending in an escaped dot keeps that dot when the leader is
+// stripped
+func TestTOCEscapedDot(t *testing.T) {
+	in := kv.HashLine + "\n" + `a\..b 1` + "\n" + `labels.app\.io/name web` + "\n" + `x\. 2` + "\n"
+	f, err := kv.JSONKeys.Parse(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	back, err := parseTOC(renderTOC(f), f.Hash, kv.JSONKeys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if back.String() != in {
+		t.Errorf("TOC round trip:\n%s\nwant\n%s", back.String(), in)
+	}
+}

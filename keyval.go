@@ -17,10 +17,11 @@ const HashLine = "# github.com/unixfile/keyval"
 
 // Dialect selects the key grammar. Strict is the format's own grammar
 // and the only one valid in a .kv file. JSONKeys also accepts the wider
-// names of foreign JSON documents, kept verbatim: anything without a
-// space, dot or control character, not starting with #. It exists for
-// the JSON bridge — .json files and the JSON conversions — and must
-// never reach a .kv file. The package-level functions are the Strict
+// names of foreign JSON and YAML documents: anything without a space
+// or control character, not starting with #. A dot inside such a name
+// is written \. and a backslash \\, so the path separator stays
+// unambiguous. It exists for the bridge — .json and .yaml files and the
+// conversions — and must never reach a .kv file. The package-level functions are the Strict
 // shorthand.
 type Dialect int
 
@@ -33,8 +34,8 @@ const (
 // character decides which. An index segment's digits denote its integer
 // value; leading zeros are padding.
 type Segment struct {
-	Raw     string
-	Name    string // name segments only
+	Raw     string // as written in a key, escapes included
+	Name    string // name segments only, unescaped
 	Index   int    // index segments only
 	IsIndex bool
 }
@@ -59,7 +60,11 @@ func parseSegment(s string, d Dialect) (Segment, error) {
 		if s[0] == '#' {
 			return Segment{}, fmt.Errorf("segment %q: a name may not start with #", s)
 		}
-		return Segment{Raw: s, Name: s}, nil
+		name, err := unescapeName(s)
+		if err != nil {
+			return Segment{}, fmt.Errorf("segment %q: %v", s, err)
+		}
+		return Segment{Raw: s, Name: name}, nil
 	}
 	switch c := s[0]; {
 	case c >= '0' && c <= '9':
@@ -80,6 +85,76 @@ func parseSegment(s string, d Dialect) (Segment, error) {
 // spec version 1.1.
 func isLetter(c byte) bool {
 	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
+}
+
+// EscapeName spells a foreign name as a JSONKeys key segment: a dot
+// becomes \. and a backslash \\.
+func EscapeName(name string) string {
+	if !strings.ContainsAny(name, `.\`) {
+		return name
+	}
+	var b strings.Builder
+	for i := 0; i < len(name); i++ {
+		if name[i] == '.' || name[i] == '\\' {
+			b.WriteByte('\\')
+		}
+		b.WriteByte(name[i])
+	}
+	return b.String()
+}
+
+func unescapeName(s string) (string, error) {
+	if strings.IndexByte(s, '\\') < 0 {
+		return s, nil
+	}
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' {
+			i++
+			if i == len(s) || s[i] != '.' && s[i] != '\\' {
+				return "", fmt.Errorf(`a backslash must be followed by . or \`)
+			}
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String(), nil
+}
+
+// splitKey splits a dotted path at its separators. Under JSONKeys a
+// dot behind a backslash belongs to the name.
+func splitKey(s string, d Dialect) []string {
+	if d != JSONKeys || strings.IndexByte(s, '\\') < 0 {
+		return strings.Split(s, ".")
+	}
+	var parts []string
+	start := 0
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '\\':
+			i++
+		case '.':
+			parts = append(parts, s[start:i])
+			start = i + 1
+		}
+	}
+	return append(parts, s[start:])
+}
+
+// TrimDot removes one trailing separator dot from a key argument and
+// reports whether there was one. An escaped dot is part of a name and
+// stays.
+func TrimDot(s string) (string, bool) {
+	if !strings.HasSuffix(s, ".") {
+		return s, false
+	}
+	n := 0
+	for i := len(s) - 2; i >= 0 && s[i] == '\\'; i-- {
+		n++
+	}
+	if n%2 == 1 {
+		return s, false
+	}
+	return s[:len(s)-1], true
 }
 
 func allDigits(s string) bool {
@@ -119,7 +194,7 @@ func ParseKey(s string) (Key, error) { return Strict.ParseKey(s) }
 
 // ParseKey parses a dotted path under the dialect's key grammar.
 func (d Dialect) ParseKey(s string) (Key, error) {
-	parts := strings.Split(s, ".")
+	parts := splitKey(s, d)
 	k := make(Key, 0, len(parts))
 	for _, p := range parts {
 		seg, err := parseSegment(p, d)

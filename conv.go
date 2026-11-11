@@ -15,9 +15,10 @@ func FromJSON(data []byte) (*File, error) { return Strict.FromJSON(data) }
 // FromJSON converts a JSON document to a keyval file. Objects become
 // named children, arrays indexed children, empty containers markers.
 // Scalars keep their literal JSON spelling — 8080, true, null — which
-// ToJSON recognizes on the way back, so scalar types round-trip. Object
-// names must fit the dialect's key grammar and may never hold a dot,
-// the path separator. The top-level value must be an object or an
+// ToJSON recognizes on the way back, so scalar types round-trip. A
+// string that would be mistaken for one of those keeps its quotes:
+// "8080". Object names must fit the dialect's key grammar; a dot in a
+// name is escaped under JSONKeys and an error under Strict. The top-level value must be an object or an
 // array; an empty one yields an empty file.
 func (d Dialect) FromJSON(data []byte) (*File, error) {
 	dec := json.NewDecoder(bytes.NewReader(data))
@@ -80,6 +81,16 @@ func emitMarker(f *File, path string, d Dialect) error {
 	return nil
 }
 
+// nameSegment spells an object or mapping name as a key segment.
+// JSONKeys escapes a dot; the strict grammar has no escape and rejects
+// the name.
+func nameSegment(path, name string, d Dialect) (string, error) {
+	if d == JSONKeys {
+		return EscapeName(name), nil
+	}
+	return name, checkName(path, name)
+}
+
 // checkName rejects an object or map name holding a dot: joined into the
 // path it would silently split into structure instead.
 func checkName(path, name string) error {
@@ -94,7 +105,7 @@ func fromJSON(v any, path string, f *File, d Dialect) error {
 	case json.Number:
 		return emitLeaf(f, path, x.String(), d)
 	case string:
-		return emitLeaf(f, path, x, d)
+		return emitLeaf(f, path, quoteString(x), d)
 	case bool:
 		if x {
 			return emitLeaf(f, path, "true", d)
@@ -118,10 +129,11 @@ func fromJSON(v any, path string, f *File, d Dialect) error {
 			return emitMarker(f, path, d)
 		}
 		for name, item := range x {
-			if err := checkName(path, name); err != nil {
+			seg, err := nameSegment(path, name, d)
+			if err != nil {
 				return err
 			}
-			if err := fromJSON(item, joinPath(path, name), f, d); err != nil {
+			if err := fromJSON(item, joinPath(path, seg), f, d); err != nil {
 				return err
 			}
 		}
@@ -134,9 +146,9 @@ func fromJSON(v any, path string, f *File, d Dialect) error {
 // indexed children becomes an array; any named child makes it an object,
 // with indexed siblings keyed by their integer. Markers become {}, so an
 // empty array does not survive a round trip. A leaf spelled exactly like
-// a JSON number, true, false or null is emitted as that type, everything
-// else as a string; the guessing mirrors FromJSON and is the documented
-// edge of this lossy conversion.
+// a JSON number, true, false or null is emitted as that type, and one
+// spelled like a JSON string literal, "8080", as the string inside the
+// quotes. Everything else is a string as it stands.
 func ToJSON(f *File) ([]byte, error) {
 	out, err := json.MarshalIndent(materialize(buildTree(f), guessScalar), "", "  ")
 	if err != nil {
@@ -145,13 +157,37 @@ func ToJSON(f *File) ([]byte, error) {
 	return append(out, '\n'), nil
 }
 
+// quoteString spells a string value as a leaf. A string that
+// guessScalar would read as another type, or as a quoted string, is
+// written as a JSON string literal so it returns as the same string.
+func quoteString(s string) string {
+	if g, ok := guessScalar(s).(string); ok && g == s {
+		return s
+	}
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(s); err != nil {
+		return s
+	}
+	return strings.TrimSuffix(b.String(), "\n")
+}
+
 // guessScalar maps a leaf value back to a JSON type when it is spelled
 // exactly like one. json.Valid is the number test: it rejects 08, 1.,
-// and other near-numbers, so they stay strings.
+// and other near-numbers, so they stay strings. A JSON string literal
+// yields its content.
 func guessScalar(v string) any {
 	switch v {
 	case "true", "false", "null":
 		return json.RawMessage(v)
+	}
+	if len(v) >= 2 && v[0] == '"' && v[len(v)-1] == '"' {
+		var s string
+		if json.Unmarshal([]byte(v), &s) == nil {
+			return s
+		}
+		return v
 	}
 	if v != "" && (v[0] == '-' || v[0] >= '0' && v[0] <= '9') &&
 		!strings.ContainsAny(v, " \t\n\r") && json.Valid([]byte(v)) {

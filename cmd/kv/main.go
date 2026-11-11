@@ -275,7 +275,8 @@ flags:
 		if len(rest) < 1 {
 			return nil, fmt.Errorf("%s needs a key", cmd)
 		}
-		return g.ParseKey(strings.TrimSuffix(rest[0], "."))
+		k, _ := kv.TrimDot(rest[0])
+		return g.ParseKey(k)
 	}
 	value := func() (string, error) {
 		if len(rest) >= 2 {
@@ -302,8 +303,8 @@ flags:
 			return fail(err)
 		}
 		var opErr error
-		if strings.HasSuffix(rawKey, ".") {
-			k, err := g.ParseKey(strings.TrimSuffix(rawKey, "."))
+		if trimmed, ok := kv.TrimDot(rawKey); ok {
+			k, err := g.ParseKey(trimmed)
 			if err != nil {
 				return fail(err)
 			}
@@ -416,7 +417,8 @@ flags:
 		}
 		var prefix kv.Key
 		if len(rest) > 0 {
-			prefix, err = g.ParseKey(strings.TrimSuffix(rest[0], "."))
+			trimmed, _ := kv.TrimDot(rest[0])
+			prefix, err = g.ParseKey(trimmed)
 			if err != nil {
 				return fail(err)
 			}
@@ -433,7 +435,8 @@ flags:
 		}
 		var prefix kv.Key
 		if len(rest) > 0 {
-			prefix, err = g.ParseKey(strings.TrimSuffix(rest[0], "."))
+			trimmed, _ := kv.TrimDot(rest[0])
+			prefix, err = g.ParseKey(trimmed)
 			if err != nil {
 				return fail(err)
 			}
