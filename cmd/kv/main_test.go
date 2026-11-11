@@ -3,7 +3,10 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/unixfile/kv"
 )
 
 func TestExtraArgsRejected(t *testing.T) {
@@ -196,5 +199,55 @@ func TestVersion(t *testing.T) {
 	}
 	if code := run([]string{"-v"}); code != 0 {
 		t.Errorf("-v: exit %d", code)
+	}
+}
+
+func TestYAMLFileMode(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	for _, name := range []string{"x.yaml", "x.YML"} {
+		path := filepath.Join(t.TempDir(), name)
+		in := "# dropped\nkind: Deployment\nspec:\n  replicas: 3\n"
+		if err := os.WriteFile(path, []byte(in), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		for _, args := range [][]string{
+			{"-f", path, "spec.replicas=5"},
+			{"-f", path, "spec.template.metadata.labels.app-name=web"},
+			{"-f", path, "spec.ports+=80"},
+		} {
+			if code := run(args); code != 0 {
+				t.Fatalf("run(%v): exit %d", args, code)
+			}
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := "kind: Deployment\nspec:\n  ports:\n    - 80\n  replicas: 5\n" +
+			"  template:\n    metadata:\n      labels:\n        app-name: web\n"
+		if string(b) != want {
+			t.Errorf("%s after YAML mode:\n%s\nwant\n%s", name, b, want)
+		}
+	}
+}
+
+func TestFromDoc(t *testing.T) {
+	for name, in := range map[string]string{
+		"json":      `{"a": {"b": 1}}`,
+		"yaml":      "a:\n  b: 1\n",
+		"yaml flow": "{a: {b: 1}}",
+	} {
+		f, err := fromDoc([]byte(in), kv.Strict)
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		if want := kv.HashLine + "\na.b 1\n"; f.String() != want {
+			t.Errorf("%s: %q, want %q", name, f.String(), want)
+		}
+	}
+	// malformed JSON reports the JSON error, not a YAML one
+	if _, err := fromDoc([]byte(`{"a": 1} junk`), kv.Strict); err == nil || !strings.Contains(err.Error(), "JSON") {
+		t.Errorf("malformed JSON: %v", err)
 	}
 }

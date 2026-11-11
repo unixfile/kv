@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -37,8 +38,9 @@ var commands = []cmdDef{
 	{"edit",       "e", 0, "",              "open in $EDITOR, values aligned"},
 	{"fmt",        "f", 0, "",              "sort and validate"},
 	{"tree",       "t", 1, "[key]",         "print the tree, or a subtree under a key"},
-	{"kv",         "",  0, "",              "convert JSON (stdin) to keyval"},
+	{"kv",         "",  0, "",              "convert JSON or YAML (stdin) to keyval"},
 	{"json",       "",  0, "",              "convert keyval to JSON"},
+	{"yaml",       "",  0, "",              "convert keyval to YAML"},
 	{"completion", "",  1, "bash",          "print the bash completion script"},
 	{"magic",      "",  0, "",              "print a file(1) magic block for ~/.magic"},
 }
@@ -92,8 +94,8 @@ func usageText() string {
 		"a trailing dot on create makes an empty container\n" +
 		"a missing value is read from piped stdin\n" +
 		"file resolution: -f, KV_FILE, session file, a lone *.kv here\n" +
-		"without a file, fmt and the json verbs filter stdin to stdout\n" +
-		"a *.json file is edited as JSON, converted on the fly\n"
+		"without a file, fmt, kv, json and yaml filter stdin to stdout\n" +
+		"a *.json, *.yaml or *.yml file is edited in its own format, converted on the fly\n"
 }
 
 func main() {
@@ -246,9 +248,11 @@ flags:
 	case "fmt", "f":
 		return runFmt(path)
 	case "kv":
-		return runFromJSON(path)
+		return runFromDoc(path)
 	case "json":
-		return runToJSON(path)
+		return runTo(path, kv.ToJSON)
+	case "yaml":
+		return runTo(path, kv.ToYAML)
 	case "completion":
 		return runCompletion(rest)
 	case "magic":
@@ -451,7 +455,7 @@ flags:
 
 func runFmt(path string) int {
 	if path != "" {
-		if jsonPath(path) {
+		if docFormat(path) != "" {
 			f, err := loadFile(path, false)
 			if err != nil {
 				return fail(err)
@@ -483,19 +487,20 @@ func runFmt(path string) int {
 	return 0
 }
 
-// runFromJSON converts JSON on stdin to keyval: into the resolved file,
-// or to stdout when none is set. Only a .kv target forces the strict
-// key grammar; stdout is part of the JSON pipeline.
-func runFromJSON(path string) int {
+// runFromDoc converts JSON or YAML on stdin to keyval: into the
+// resolved file, or to stdout when none is set. Only a .kv target
+// forces the strict key grammar; stdout is part of a conversion
+// pipeline.
+func runFromDoc(path string) int {
 	b, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		return fail(err)
 	}
 	g := kv.JSONKeys
-	if path != "" && !jsonPath(path) {
+	if path != "" && docFormat(path) == "" {
 		g = kv.Strict
 	}
-	f, err := g.FromJSON(b)
+	f, err := fromDoc(b, g)
 	if err != nil {
 		return fail(err)
 	}
@@ -506,9 +511,28 @@ func runFromJSON(path string) int {
 	return 0
 }
 
-// runToJSON converts the resolved file, or keyval on stdin when none is
-// set, to JSON on stdout.
-func runToJSON(path string) int {
+// fromDoc converts stdin of either foreign format. Input that opens
+// with { or [ is tried as JSON first; YAML flow syntax opens the same
+// way, so a JSON failure falls through to YAML and the JSON error is
+// reported only when both fail.
+func fromDoc(b []byte, g kv.Dialect) (*kv.File, error) {
+	t := bytes.TrimLeft(b, " \t\r\n")
+	if len(t) == 0 || t[0] != '{' && t[0] != '[' {
+		return g.FromYAML(b)
+	}
+	f, jerr := g.FromJSON(b)
+	if jerr == nil {
+		return f, nil
+	}
+	if f, err := g.FromYAML(b); err == nil {
+		return f, nil
+	}
+	return nil, jerr
+}
+
+// runTo converts the resolved file, or keyval on stdin when none is
+// set, to JSON or YAML on stdout.
+func runTo(path string, conv func(*kv.File) ([]byte, error)) int {
 	var f *kv.File
 	var err error
 	if path != "" {
@@ -516,14 +540,14 @@ func runToJSON(path string) int {
 	} else {
 		var b []byte
 		if b, err = io.ReadAll(os.Stdin); err == nil {
-			// the destination is JSON, so the wide key grammar applies
+			// the destination is foreign, so the wide key grammar applies
 			f, err = kv.JSONKeys.Parse(string(b))
 		}
 	}
 	if err != nil {
 		return fail(err)
 	}
-	out, err := kv.ToJSON(f)
+	out, err := conv(f)
 	if err != nil {
 		return fail(err)
 	}
@@ -569,22 +593,30 @@ func boolFail(err error) int {
 	return 0
 }
 
-// jsonPath reports whether path should be read and written as JSON.
-func jsonPath(path string) bool {
-	return strings.EqualFold(filepath.Ext(path), ".json")
+// docFormat names the foreign format path is read and written as:
+// "json", "yaml", or "" for keyval.
+func docFormat(path string) string {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".json":
+		return "json"
+	case ".yaml", ".yml":
+		return "yaml"
+	}
+	return ""
 }
 
 // dialect picks the key grammar for a document: the strict grammar for
-// .kv files, the verbatim JSON-keys grammar when the document is JSON.
+// .kv files, the verbatim JSON-keys grammar when the document is JSON
+// or YAML.
 func dialect(path string) kv.Dialect {
-	if jsonPath(path) {
+	if docFormat(path) != "" {
 		return kv.JSONKeys
 	}
 	return kv.Strict
 }
 
 // loneFile returns the implicit file for the current directory: exactly
-// one non-hidden .kv file. JSON never resolves implicitly — the bridge
+// one non-hidden .kv file. JSON and YAML never resolve implicitly — a bridge
 // format demands an explicit -f, -F or KV_FILE.
 func loneFile() string {
 	ents, err := os.ReadDir(".")
@@ -607,7 +639,7 @@ func loneFile() string {
 	return found
 }
 
-// loadFile reads and strict-parses path, converting from JSON when the
+// loadFile reads and strict-parses path, converting from JSON or YAML when the
 // extension says so. With mayCreate set, a missing file yields a new
 // empty file carrying the hash line.
 func loadFile(path string, mayCreate bool) (*kv.File, error) {
@@ -619,8 +651,11 @@ func loadFile(path string, mayCreate bool) (*kv.File, error) {
 		return nil, err
 	}
 	noteRecent(path)
-	if jsonPath(path) {
+	switch docFormat(path) {
+	case "json":
 		return kv.JSONKeys.FromJSON(b)
+	case "yaml":
+		return kv.JSONKeys.FromYAML(b)
 	}
 	return kv.Parse(string(b))
 }
@@ -628,17 +663,22 @@ func loadFile(path string, mayCreate bool) (*kv.File, error) {
 // saveFile writes atomically: temp file in the same directory, then
 // rename. An existing file keeps its permission bits and its old
 // content goes to the backup directory first; a failed backup warns but
-// never blocks the save. A JSON path is written as JSON; a .kv write
+// never blocks the save. A JSON or YAML path is written in its format; a .kv write
 // missing its idline gets the canonical hash line, existing ones kept.
 func saveFile(path string, f *kv.File) error {
 	var out []byte
-	if jsonPath(path) {
-		b, err := kv.ToJSON(f)
+	switch docFormat(path) {
+	case "json", "yaml":
+		conv := kv.ToJSON
+		if docFormat(path) == "yaml" {
+			conv = kv.ToYAML
+		}
+		b, err := conv(f)
 		if err != nil {
 			return err
 		}
 		out = b
-	} else {
+	default:
 		if f.Hash == "" {
 			f.Hash = kv.HashLine
 		}

@@ -39,8 +39,9 @@ usage: kv [-f file] [-F file] <command> [args]
   edit        e                 open in $EDITOR, values aligned
   fmt         f                 sort and validate
   tree        t  [key]          print the tree, or a subtree under a key
-  kv                            convert JSON (stdin) to keyval
+  kv                            convert JSON or YAML (stdin) to keyval
   json                          convert keyval to JSON
+  yaml                          convert keyval to YAML
   completion     bash           print the bash completion script
   magic                         print a file(1) magic block for ~/.magic
 
@@ -60,7 +61,7 @@ key literally named `tree` needs `kv r tree`.
 
 The file is resolved in order: `-f`, the `KV_FILE` environment
 variable, the session file, and finally a lone `.kv` file in the
-current directory; JSON never resolves implicitly. `-F` binds a file to the current terminal, so a
+current directory; JSON and YAML never resolve implicitly. `-F` binds a file to the current terminal, so a
 session needs no flag at all:
 
 ```
@@ -118,31 +119,21 @@ editor with a nonzero status, `:cq` in vim, aborts without writing. A
 file that changed on disk while the editor was open prompts before
 being overwritten.
 
-## JSON
+## JSON and YAML
 
-`kv kv` and `kv json` convert on stdin and stdout. A file named
-`*.json` converts on the fly, which turns every command into a JSON
-editor:
+`kv kv` converts JSON or YAML on stdin to keyval. `kv json` and
+`kv yaml` convert back. A file named `*.json`, `*.yaml` or `*.yml`
+converts on the fly, which turns every command into an editor for that
+format:
 
 ```
 $ kv -f config.json update db.port 9090
-$ kv -f config.json push tags staging
+$ kv -f deploy.yaml spec.replicas=5
 ```
 
-Conversion is heuristic and lossy at the edges. A leaf spelled exactly
-like a JSON number, `true`, `false` or `null` converts to that type;
-everything else stays a string. Scalars therefore round-trip, including
-null. Markers become `{}`, so an empty JSON array returns as an empty
-object.
-
-Keys follow the document. A `.kv` file allows only the strict grammar:
-names of letters, digits and underscores, and indices. When the document is JSON, a `.json` file
-or the json verbs, keys are taken verbatim, so `maxRetries`,
-`Content-Type` and `$schema` all work. Keys are never folded or
-renamed. Names with dots, spaces or control characters cannot be
-represented, and neither can numeric names that do not count from
-zero. A key holding an operator character needs the verb form on the
-command line: `kv r 'a=b'`.
+Conversion is lossy at the edges: YAML comments are dropped, and a
+quoted `"8080"` returns as a number.
+[doc/conversion.md](doc/conversion.md) has the rules.
 
 ## File type
 
@@ -196,9 +187,10 @@ var c config
 err = kv.Unmarshal(f, &c)
 ```
 
-`kv.FromJSON` and `kv.ToJSON` expose the converter in Go. The
-package-level functions use the strict key grammar; the JSON-keys
-dialect is explicit, as in `kv.JSONKeys.FromJSON`, `kv.JSONKeys.Parse`
+`kv.FromJSON`, `kv.ToJSON`, `kv.FromYAML` and `kv.ToYAML` expose the
+converters in Go. The package-level functions use the strict key
+grammar; the JSON-keys dialect is explicit, as in
+`kv.JSONKeys.FromJSON`, `kv.JSONKeys.FromYAML`, `kv.JSONKeys.Parse`
 and `kv.JSONKeys.ParseKey`. The library never touches the filesystem.
 
 ## Completion

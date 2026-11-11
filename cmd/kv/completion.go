@@ -64,10 +64,10 @@ _kv_keys() {
     done
 }
 
-# file candidates for -f/-F: directories and *.kv/*.json first, then
-# still-existing entries from the recent list, newest first. Other
-# extensions stay reachable by typing; completion encourages the pair
-# the resolver knows.
+# file candidates for -f/-F: directories and *.kv, *.json, *.yaml and
+# *.yml first, then still-existing entries from the recent list, newest
+# first. Other extensions stay reachable by typing; completion
+# encourages the formats the resolver knows.
 _kv_files() {
     local f
     local -A seen
@@ -76,7 +76,7 @@ _kv_files() {
         seen[$f]=1
         if [[ -d $f ]]; then
             COMPREPLY+=("$f/")
-        elif [[ $f == *.kv || $f == *.json ]]; then
+        elif [[ $f == *.kv || $f == *.json || $f == *.yaml || $f == *.yml ]]; then
             COMPREPLY+=("$f ")
         fi
     done
